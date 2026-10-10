@@ -3,6 +3,8 @@ package pkg
 import (
 	"testing"
 
+	osvjdk "github.com/bell-sw/osv-internal/vendorjdk"
+
 	"github.com/scylladb/go-set/strset"
 	"github.com/stretchr/testify/assert"
 )
@@ -139,6 +141,16 @@ func TestTypeFromPURL(t *testing.T) {
 			name:     "conda",
 			purl:     "pkg:generic/conda@1.2.3",
 			expected: CondaPkg,
+		},
+		{
+			name:     osvjdk.PURLNameJDK,
+			purl:     osvjdk.PURL(osvjdk.VariantJDK, "21.0.2+14"),
+			expected: VendorJdkPkg,
+		},
+		{
+			name:     osvjdk.PURLNameNIK,
+			purl:     osvjdk.PURLNIK(osvjdk.BundleCore, "23.1.0+1"),
+			expected: VendorNikPkg,
 		},
 	}
 

@@ -7,25 +7,30 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/bell-sw/osv-internal/testfix"
+
 	"github.com/anchore/syft/syft/source"
 	"github.com/anchore/syft/syft/source/directorysource"
 )
 
-// The JVM release cataloger leaves the vendor's runtimes to the binary classifier (java-binary-vendor-jdk) so that
-// the runtime is not reported a second time as a generic OpenJDK package; other vendors keep being catalogued.
-func TestJvmDistributionCataloger_LeavesVendorRuntimesToTheClassifier(t *testing.T) {
+// The JVM release cataloger leaves the vendor's runtimes to the java-vendor-jdk-cataloger, so that a runtime is not
+// reported a second time as a generic OpenJDK package; other vendors keep being catalogued.
+func TestJvmDistributionCataloger_LeavesVendorRuntimesToTheVendorCataloger(t *testing.T) {
 	tests := []struct {
-		fixture  string
+		name     string
+		runtime  testfix.Runtime
 		wantPkgs []string
 	}{
-		{fixture: "../binary/test-fixtures/vendorjdk/jdk-21", wantPkgs: nil},
-		{fixture: "../binary/test-fixtures/vendorjdk/jdk-8", wantPkgs: nil},
-		{fixture: "../binary/test-fixtures/vendorjdk/nik-23", wantPkgs: nil},
-		{fixture: "../binary/test-fixtures/vendorjdk/zulu-21", wantPkgs: []string{"zulu@21.0.2+13-LTS"}},
+		{name: "jdk 21", runtime: testfix.Runtime{Home: "usr/lib/jvm/jdk-21.0.2-x86_64", Version: "21.0.2+14-LTS", JDK: true}},
+		{name: "jdk 8", runtime: testfix.Runtime{Home: "opt/jdk8u402", Version: "1.8.0_402-b07", JDK: true, Java8: true}},
+		{name: "nik 23", runtime: testfix.Runtime{Home: "opt/nik-core-openjdk21-23.1.0", Version: "21+37-LTS", JDK: true, NIK: "23.1.0+1"}},
+		{name: "zulu 21", runtime: testfix.Runtime{Home: "usr/lib/jvm/zulu21-ca-amd64", Version: "21.0.2+13-LTS", JDK: true, Vendor: "Azul Systems, Inc."}, wantPkgs: []string{"zulu@21.0.2+13-LTS"}},
 	}
 	for _, tt := range tests {
-		t.Run(tt.fixture, func(t *testing.T) {
-			src, err := directorysource.NewFromPath(tt.fixture)
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			testfix.Write(t, dir, tt.runtime)
+			src, err := directorysource.NewFromPath(dir)
 			require.NoError(t, err)
 			resolver, err := src.FileResolver(source.SquashedScope)
 			require.NoError(t, err)

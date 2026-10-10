@@ -21,6 +21,8 @@ var (
 	}
 	binaryCatalogerTypes = []pkg.Type{
 		pkg.BinaryPkg,
+		pkg.VendorJdkPkg, // a runtime found from its binaries; an OS package owning its files is authoritative
+		pkg.VendorNikPkg,
 	}
 	bitnamiCatalogerTypes = []pkg.Type{
 		pkg.BitnamiPkg,

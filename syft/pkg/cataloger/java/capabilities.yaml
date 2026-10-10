@@ -245,6 +245,48 @@ catalogers:
           - name: package_manager.package_integrity_hash
             default: false
   - ecosystem: java # MANUAL
+    name: java-vendor-jdk-cataloger # AUTO-GENERATED
+    type: custom # AUTO-GENERATED
+    source: # AUTO-GENERATED
+      file: syft/pkg/cataloger/java/vendorjdk_cataloger.go
+      function: NewVendorJDKCataloger
+    selectors: # AUTO-GENERATED
+      - declared
+      - directory
+      - image
+      - installed
+      - java
+      - jdk
+      - jre
+      - jvm
+      - liberica
+      - package
+    detectors: # MANUAL - edit detectors here
+      - method: glob
+        criteria:
+          - '**/libjvm.so'
+          - '**/release'
+        comment: a BellSoft Liberica JDK/JRE runtime, anchored on libjvm.so (vendor string and HotSpot banner) and corroborated by the release file or the rt.jar manifest
+    package_types: # AUTO-GENERATED
+      - liberica-jdk
+    capabilities: # MANUAL - edit capabilities here
+      - name: license
+        default: false
+      - name: dependency.depth
+        default: null
+      - name: dependency.edges
+        default: ""
+      - name: dependency.kinds
+        default: null
+      - name: package_manager.files.listing
+        default: true
+        evidence:
+          - JavaVMInstallation.Files
+      - name: package_manager.files.digests
+        default: false
+      - name: package_manager.package_integrity_hash
+        default: false
+  - ecosystem: java # MANUAL
     name: graalvm-native-image-cataloger # AUTO-GENERATED
     type: custom # AUTO-GENERATED
     source: # AUTO-GENERATED

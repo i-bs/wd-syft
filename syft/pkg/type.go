@@ -1,6 +1,8 @@
 package pkg
 
 import (
+	osvjdk "github.com/bell-sw/osv-internal/vendorjdk"
+
 	"github.com/anchore/packageurl-go"
 )
 
@@ -37,6 +39,8 @@ const (
 	KbPkg                   Type = "msrc-kb"
 	LinuxKernelPkg          Type = "linux-kernel"
 	LinuxKernelModulePkg    Type = "linux-kernel-module"
+	VendorJdkPkg            Type = osvjdk.PURLNameJDK // a standalone vendor JDK/JRE runtime (not an OS package)
+	VendorNikPkg            Type = osvjdk.PURLNameNIK // a standalone vendor Native Image Kit runtime
 	NixPkg                  Type = "nix"
 	NpmPkg                  Type = "npm"
 	OpamPkg                 Type = "opam"
@@ -82,6 +86,8 @@ var AllPkgs = []Type{
 	KbPkg,
 	LinuxKernelPkg,
 	LinuxKernelModulePkg,
+	VendorJdkPkg,
+	VendorNikPkg,
 	NixPkg,
 	NpmPkg,
 	OpamPkg,
@@ -144,6 +150,8 @@ func (t Type) PackageURLType() string {
 		return "generic/linux-kernel"
 	case LinuxKernelModulePkg:
 		return packageurl.TypeGeneric
+	case VendorJdkPkg, VendorNikPkg:
+		return packageurl.TypeGeneric
 	case PhpComposerPkg:
 		return packageurl.TypeComposer
 	case PhpPearPkg, PhpPeclPkg:
@@ -188,6 +196,15 @@ func TypeFromPURL(p string) Type {
 		return UnknownPkg
 	}
 
+	if purl.Type == packageurl.TypeGeneric && purl.Namespace == osvjdk.PURLNamespace {
+		// the vendor's standalone runtimes: pkg:generic/<namespace>/<name>, both from the osv-internal module
+		switch purl.Name {
+		case osvjdk.PURLNameJDK:
+			return VendorJdkPkg
+		case osvjdk.PURLNameNIK:
+			return VendorNikPkg
+		}
+	}
 	ptype := purl.Type
 	if ptype == "generic" {
 		ptype = purl.Name
@@ -246,6 +263,10 @@ func TypeByName(name string) Type {
 		return LinuxKernelPkg
 	case "linux-kernel-module":
 		return LinuxKernelModulePkg
+	case osvjdk.PURLNameJDK:
+		return VendorJdkPkg
+	case osvjdk.PURLNameNIK:
+		return VendorNikPkg
 	case "nix":
 		return NixPkg
 	case "opam":

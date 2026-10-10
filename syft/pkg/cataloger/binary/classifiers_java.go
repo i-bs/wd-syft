@@ -5,6 +5,7 @@ import (
 	"github.com/anchore/syft/syft/pkg"
 	"github.com/anchore/syft/syft/pkg/cataloger/internal/binutils"
 	"github.com/anchore/syft/syft/pkg/cataloger/internal/jvmvendor"
+	"github.com/anchore/syft/syft/pkg/cataloger/internal/vendorjdk"
 )
 
 //nolint:funlen
@@ -12,26 +13,8 @@ func defaultJavaClassifiers() []binutils.Classifier {
 	m := binutils.ContextualEvidenceMatchers{CatalogerName: catalogerName}
 
 	return []binutils.Classifier{
-		{
-			// The vendor's JDK/JRE, identified from the JVM library: its java.vm.vendor constant and the
-			// HotSpot banner "... JRE (21.0.2+14-LTS), built on ...". The launcher holds the version but not the vendor, so
-			// the generic java-binary classes below defer to this one (see notVendorRuntime). No CPE: NVD has no entry for
-			// the vendor's runtime and oracle:openjdk would make every CVE show up twice. A GraalVM-based runtime is NIK, next entry.
-			Class:           "java-binary-vendor-jdk",
-			FileGlob:        jvmvendor.JVMLibraryGlob,
-			EvidenceMatcher: vendorRuntimeMatcher(false),
-			Package:         "liberica-jdk",
-			PURL:            mustPURL("pkg:generic/bellsoft/liberica-jdk@version"),
-		},
-		{
-			// The vendor's Native Image Kit: a vendor runtime with GraalVM markers (GRAALVM_VERSION in release,
-			// lib/svm/, bin/native-image); the version is the java.vendor.version "Liberica-NIK-23.1.0-1" (-> 23.1.0+1).
-			Class:           "java-binary-vendor-nik",
-			FileGlob:        jvmvendor.JVMLibraryGlob,
-			EvidenceMatcher: vendorRuntimeMatcher(true),
-			Package:         "liberica-nik",
-			PURL:            mustPURL("pkg:generic/bellsoft/liberica-nik@version"),
-		},
+		// The vendor's runtimes are catalogued by the java-vendor-jdk-cataloger; the generic java-binary classes
+		// below defer to it for the same runtime (see notVendorRuntime).
 		{
 			Class:    "java-binary",
 			FileGlob: "**/java",
@@ -217,37 +200,12 @@ func defaultJavaClassifiers() []binutils.Classifier {
 	}
 }
 
-// vendorRuntimeMatcher classifies the runtime a JVM library belongs to when it is the vendor's: a JDK/JRE
-// (version from the HotSpot banner) or, with nik set, a Native Image Kit (version from the vendor version).
-func vendorRuntimeMatcher(nik bool) binutils.EvidenceMatcher {
-	return func(classifier binutils.Classifier, context binutils.MatcherContext) ([]pkg.Package, error) {
-		home := jvmvendor.RuntimeHome(context.Resolver, context.Location.RealPath)
-		if home == "" {
-			return nil, nil
-		}
-		rt := jvmvendor.Inspect(context.Resolver, home)
-		if rt.Vendor != jvmvendor.Vendor || rt.NIK != nik {
-			return nil, nil
-		}
-		version := rt.Version
-		if nik {
-			version = rt.NIKVersion
-		}
-		if version == "" {
-			return nil, nil
-		}
-		p := binutils.NewClassifierPackage(classifier, context.Location, map[string]string{"version": version}, catalogerName)
-		if p == nil {
-			return nil, nil
-		}
-		return []pkg.Package{*p}, nil
-	}
-}
-
 // notVendorRuntime succeeds (with no packages) unless the launcher being classified belongs to a vendor
-// runtime, which the java-binary-vendor-jdk/-nik classifiers report from the JVM library instead.
+// runtime, which the java-vendor-jdk-cataloger reports instead. The verdict is the shared detector's, the same the
+// cataloger uses, so the two cannot disagree; jvmvendor only locates the runtime home.
 func notVendorRuntime(_ binutils.Classifier, context binutils.MatcherContext) ([]pkg.Package, error) {
-	if jvmvendor.IsVendorRuntime(context.Resolver, context.Location.RealPath) {
+	home := jvmvendor.RuntimeHome(context.Resolver, context.Location.RealPath)
+	if home != "" && vendorjdk.IsRuntimeHome(context.Resolver, home) {
 		return nil, nil
 	}
 	return []pkg.Package{}, nil

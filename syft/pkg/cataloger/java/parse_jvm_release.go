@@ -19,7 +19,7 @@ import (
 	"github.com/anchore/syft/syft/file"
 	"github.com/anchore/syft/syft/pkg"
 	"github.com/anchore/syft/syft/pkg/cataloger/generic"
-	"github.com/anchore/syft/syft/pkg/cataloger/internal/jvmvendor"
+	"github.com/anchore/syft/syft/pkg/cataloger/internal/vendorjdk"
 )
 
 const (
@@ -84,10 +84,10 @@ func parseJVMRelease(_ context.Context, resolver file.Resolver, _ *generic.Envir
 
 	installDir := path.Dir(reader.Path())
 
-	// The vendor's runtimes are classified from libjvm.so by the binary cataloger (java-binary-vendor-jdk); the
-	// release file must not turn them into a second, generic OpenJDK package with an oracle:openjdk CPE
-	if jvmvendor.Inspect(resolver, installDir).Vendor == jvmvendor.Vendor {
-		log.WithFields("path", reader.Path()).Trace("JVM release belongs to a vendor runtime; left to the binary classifier")
+	// The vendor's runtimes are catalogued by the java-vendor-jdk-cataloger; the release file must not turn
+	// them into a second, generic OpenJDK package
+	if vendorjdk.IsRuntimeHome(resolver, installDir) {
+		log.WithFields("path", reader.Path()).Trace("JVM release belongs to a vendor runtime; left to the vendor JDK cataloger")
 		return nil, nil, nil
 	}
 
