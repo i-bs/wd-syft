@@ -3,8 +3,10 @@ package pkg
 import (
 	"testing"
 
+	osvinternal "github.com/bell-sw/osv-internal"
 	osvjdk "github.com/bell-sw/osv-internal/vendorjdk"
 
+	"github.com/anchore/packageurl-go"
 	"github.com/scylladb/go-set/strset"
 	"github.com/stretchr/testify/assert"
 )
@@ -142,16 +144,22 @@ func TestTypeFromPURL(t *testing.T) {
 			purl:     "pkg:generic/conda@1.2.3",
 			expected: CondaPkg,
 		},
-		{
-			name:     osvjdk.PURLNameJDK,
-			purl:     osvjdk.PURL(osvjdk.VariantJDK, "21.0.2+14"),
-			expected: VendorJdkPkg,
-		},
-		{
-			name:     osvjdk.PURLNameNIK,
-			purl:     osvjdk.PURLNIK(osvjdk.BundleCore, "23.1.0+1"),
-			expected: VendorNikPkg,
-		},
+	}
+	// the vendor's standalone runtimes: one type per product family of the module
+	for _, p := range osvinternal.Products {
+		qualifier, version := osvjdk.VariantJDK, "21.0.2+14"
+		if p.Kind == osvinternal.KindNIK {
+			qualifier, version = osvjdk.BundleCore, "23.1.0+1"
+		}
+		tests = append(tests, struct {
+			name     string
+			purl     string
+			expected Type
+		}{
+			name:     p.PURLName,
+			purl:     osvjdk.PURL(p.Family, qualifier, version),
+			expected: VendorRuntimeType(p.Family),
+		})
 	}
 
 	var pkgTypes = strset.New()
@@ -188,4 +196,21 @@ func TestTypeFromPURL(t *testing.T) {
 	}
 
 	assert.ElementsMatch(t, expectedTypes.List(), pkgTypes.List(), "missing one or more package types to test against (maybe a package type was added?)")
+}
+
+// One package type per product family of the module, named by the family's purl name.
+func TestVendorRuntimeTypes(t *testing.T) {
+	assert.Len(t, VendorRuntimeTypes(), len(osvinternal.Products))
+	for i, p := range osvinternal.Products {
+		typ := VendorRuntimeType(p.Family)
+		assert.Equal(t, Type(p.PURLName), typ)
+		assert.Equal(t, typ, VendorRuntimeTypes()[i])
+		assert.True(t, IsVendorRuntime(typ))
+		assert.Contains(t, AllPkgs, typ)
+		assert.Equal(t, packageurl.TypeGeneric, typ.PackageURLType())
+		assert.Equal(t, typ, TypeByName(p.PURLName))
+	}
+	assert.Equal(t, Type(""), VendorRuntimeType("Acme JDK"))
+	assert.False(t, IsVendorRuntime(JavaPkg))
+	assert.False(t, IsVendorRuntime(BinaryPkg))
 }

@@ -19,11 +19,8 @@ var (
 		pkg.PortagePkg,
 		pkg.RpmPkg,
 	}
-	binaryCatalogerTypes = []pkg.Type{
-		pkg.BinaryPkg,
-		pkg.VendorJdkPkg, // a runtime found from its binaries; an OS package owning its files is authoritative
-		pkg.VendorNikPkg,
-	}
+	// the vendor runtimes are found from their binaries; an OS package owning their files is authoritative
+	binaryCatalogerTypes = append([]pkg.Type{pkg.BinaryPkg}, pkg.VendorRuntimeTypes()...)
 	bitnamiCatalogerTypes = []pkg.Type{
 		pkg.BitnamiPkg,
 	}

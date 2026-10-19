@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	osvinternal "github.com/bell-sw/osv-internal"
 	osvjdk "github.com/bell-sw/osv-internal/vendorjdk"
 
 	"github.com/anchore/packageurl-go"
@@ -39,8 +40,6 @@ const (
 	KbPkg                   Type = "msrc-kb"
 	LinuxKernelPkg          Type = "linux-kernel"
 	LinuxKernelModulePkg    Type = "linux-kernel-module"
-	VendorJdkPkg            Type = osvjdk.PURLNameJDK // a standalone vendor JDK/JRE runtime (not an OS package)
-	VendorNikPkg            Type = osvjdk.PURLNameNIK // a standalone vendor Native Image Kit runtime
 	NixPkg                  Type = "nix"
 	NpmPkg                  Type = "npm"
 	OpamPkg                 Type = "opam"
@@ -62,7 +61,7 @@ const (
 )
 
 // AllPkgs represents all supported package types
-var AllPkgs = []Type{
+var AllPkgs = append([]Type{
 	AlpmPkg,
 	ApkPkg,
 	BinaryPkg,
@@ -86,8 +85,6 @@ var AllPkgs = []Type{
 	KbPkg,
 	LinuxKernelPkg,
 	LinuxKernelModulePkg,
-	VendorJdkPkg,
-	VendorNikPkg,
 	NixPkg,
 	NpmPkg,
 	OpamPkg,
@@ -106,12 +103,15 @@ var AllPkgs = []Type{
 	WordpressPluginPkg,
 	HomebrewPkg,
 	ModelPkg,
-}
+}, VendorRuntimeTypes()...)
 
 // PackageURLType returns the PURL package type for the current package.
 //
 //nolint:funlen, gocyclo
 func (t Type) PackageURLType() string {
+	if IsVendorRuntime(t) {
+		return packageurl.TypeGeneric
+	}
 	switch t {
 	case AlpmPkg:
 		return "alpm"
@@ -149,8 +149,6 @@ func (t Type) PackageURLType() string {
 	case LinuxKernelPkg:
 		return "generic/linux-kernel"
 	case LinuxKernelModulePkg:
-		return packageurl.TypeGeneric
-	case VendorJdkPkg, VendorNikPkg:
 		return packageurl.TypeGeneric
 	case PhpComposerPkg:
 		return packageurl.TypeComposer
@@ -197,12 +195,9 @@ func TypeFromPURL(p string) Type {
 	}
 
 	if purl.Type == packageurl.TypeGeneric && purl.Namespace == osvjdk.PURLNamespace {
-		// the vendor's standalone runtimes: pkg:generic/<namespace>/<name>, both from the osv-internal module
-		switch purl.Name {
-		case osvjdk.PURLNameJDK:
-			return VendorJdkPkg
-		case osvjdk.PURLNameNIK:
-			return VendorNikPkg
+		// the vendor's standalone runtimes: pkg:generic/<namespace>/<purl name of the family>, both from the osv-internal module
+		if t := Type(purl.Name); IsVendorRuntime(t) {
+			return t
 		}
 	}
 	ptype := purl.Type
@@ -214,6 +209,9 @@ func TypeFromPURL(p string) Type {
 
 //nolint:funlen,gocyclo
 func TypeByName(name string) Type {
+	if t := Type(name); IsVendorRuntime(t) {
+		return t
+	}
 	switch name {
 	case "alpm":
 		return AlpmPkg
@@ -263,10 +261,6 @@ func TypeByName(name string) Type {
 		return LinuxKernelPkg
 	case "linux-kernel-module":
 		return LinuxKernelModulePkg
-	case osvjdk.PURLNameJDK:
-		return VendorJdkPkg
-	case osvjdk.PURLNameNIK:
-		return VendorNikPkg
 	case "nix":
 		return NixPkg
 	case "opam":
@@ -288,4 +282,36 @@ func TypeByName(name string) Type {
 	default:
 		return UnknownPkg
 	}
+}
+
+// The standalone runtimes of the vendor have one package type per product
+// family of the osv-internal module (osvinternal.Products), named by the
+// family's purl name, so that pkg:generic/<namespace>/<name> maps back to it.
+
+// VendorRuntimeType returns the type of a runtime of a product family; "" for
+// an unknown family.
+func VendorRuntimeType(family string) Type {
+	if p := osvinternal.ProductOf(family); p != nil {
+		return Type(p.PURLName)
+	}
+	return ""
+}
+
+// VendorRuntimeTypes returns the types of every product family, in table order.
+func VendorRuntimeTypes() []Type {
+	var types []Type
+	for _, p := range osvinternal.Products {
+		types = append(types, Type(p.PURLName))
+	}
+	return types
+}
+
+// IsVendorRuntime reports whether t is the type of a vendor runtime.
+func IsVendorRuntime(t Type) bool {
+	for _, p := range osvinternal.Products {
+		if Type(p.PURLName) == t {
+			return true
+		}
+	}
+	return false
 }

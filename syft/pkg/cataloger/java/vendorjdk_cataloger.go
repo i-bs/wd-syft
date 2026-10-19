@@ -46,8 +46,8 @@ func runtimeCandidates(ctx context.Context, resolver file.Resolver) (libs, relea
 }
 
 // NewVendorJDKCataloger returns a cataloger that reports standalone vendor runtimes with the identity of the shared
-// osv-internal module: JDK/JRE as pkg.VendorJdkPkg (purl pkg:generic/<namespace>/<jdk name>, name = variant,
-// version in product notation, ecosystem "<JDK family>:<major>") and the Native Image Kit as pkg.VendorNikPkg
+// osv-internal module, with the type of its product family (pkg.VendorRuntimeType, the family's purl name): JDK/JRE (purl pkg:generic/<namespace>/<jdk name>, name = variant,
+// version in product notation, ecosystem "<JDK family>:<major>") and the Native Image Kit
 // (pkg:generic/<namespace>/<nik name>, name = bundle, ecosystem "<NIK family>:<nik major>-<java major>"); a NIK is
 // reported once, as NIK. Detection is the module's, anchored on the JVM library with the release file as fallback;
 // other vendors are left to the JVM release cataloger and the binary classifiers, and runtimes under /usr/lib/jvm on
@@ -145,10 +145,7 @@ func newRuntimePackage(resolver file.Resolver, rt *vendorjdk.Runtime, libjvm *fi
 		locations.Add(libjvm.WithAnnotation(pkg.EvidenceAnnotationKey, pkg.PrimaryEvidenceAnnotation))
 	}
 
-	typ := pkg.VendorJdkPkg
-	if rt.IsNIK {
-		typ = pkg.VendorNikPkg
-	}
+	typ := pkg.VendorRuntimeType(rt.Product)
 	p := pkg.Package{
 		Name:      rt.Variant,
 		Version:   rt.Version,

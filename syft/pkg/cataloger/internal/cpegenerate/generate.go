@@ -147,7 +147,7 @@ func FromPackageAttributes(p pkg.Package) []cpe.CPE {
 
 	// no CPE for a standalone vendor runtime: it is matched by purl against the vendor's advisories, and a
 	// generic oracle:openjdk CPE would make SBOM consumers report every CVE twice
-	if p.Type == pkg.VendorJdkPkg || p.Type == pkg.VendorNikPkg {
+	if pkg.IsVendorRuntime(p.Type) {
 		return nil
 	}
 

@@ -83,10 +83,24 @@ func describe(pkgs []pkg.Package) []string {
 	return out
 }
 
+// The first JDK and NIK families of the module: the fixtures are theirs.
 var (
-	jdkPURLPrefix = "pkg:generic/" + osvjdk.PURLNamespace + "/" + osvjdk.PURLNameJDK + "@"
-	nikPURLPrefix = "pkg:generic/" + osvjdk.PURLNamespace + "/" + osvjdk.PURLNameNIK + "@"
+	jdkProduct    = testfix.Product(osvinternal.KindJDK)
+	nikProduct    = testfix.Product(osvinternal.KindNIK)
+	jdkType       = pkg.VendorRuntimeType(jdkProduct.Family)
+	nikType       = pkg.VendorRuntimeType(nikProduct.Family)
+	jdkPURLPrefix = "pkg:generic/" + osvjdk.PURLNamespace + "/" + jdkProduct.PURLName + "@"
+	nikPURLPrefix = "pkg:generic/" + osvjdk.PURLNamespace + "/" + nikProduct.PURLName + "@"
 )
+
+// vendorRuntimePackages are the packages of every runtime type of the module.
+func vendorRuntimePackages(s *sbom.SBOM) []pkg.Package {
+	var out []pkg.Package
+	for _, t := range pkg.VendorRuntimeTypes() {
+		out = append(out, packagesOfType(s, t)...)
+	}
+	return out
+}
 
 // A vendor runtime is reported once, as the vendor's JDK (purl from the shared module, no generic CPE), and the
 // generic java classifiers / JVM release cataloger do not emit a second package for the same runtime.
@@ -178,10 +192,10 @@ func TestVendorJDKCataloger_OneRuntimeOnePackage(t *testing.T) {
 			require.Len(t, all, 1, "exactly one package for one runtime: %v", describe(all))
 
 			p := all[0]
-			assert.Equal(t, pkg.VendorJdkPkg, p.Type)
+			assert.Equal(t, jdkType, p.Type)
 			assert.Equal(t, tt.wantVariant, p.Name)
 			assert.Equal(t, tt.wantVersion, p.Version)
-			assert.Equal(t, osvjdk.PURL(tt.wantVariant, tt.wantVersion), p.PURL)
+			assert.Equal(t, osvjdk.PURL(jdkProduct.Family, tt.wantVariant, tt.wantVersion), p.PURL)
 			assert.True(t, strings.HasPrefix(p.PURL, jdkPURLPrefix), p.PURL)
 			assert.Contains(t, p.PURL, "package_type="+tt.wantVariant)
 			assert.Empty(t, p.CPEs, "a vendor runtime must not carry a generic (oracle:openjdk) or generated CPE")
@@ -209,7 +223,7 @@ func TestVendorJDKCataloger_OneRuntimeOnePackage(t *testing.T) {
 // vendor's JDK.
 func TestVendorJDKCataloger_OtherVendorsUntouched(t *testing.T) {
 	s := catalog(t, nil, testfix.Runtime{Home: "usr/lib/jvm/zulu21-ca-amd64", Version: "21.0.2+13-LTS", JDK: true, Vendor: "Azul Systems, Inc."})
-	assert.Empty(t, packagesOfType(s, pkg.VendorJdkPkg), "a Zulu runtime must never be reported as the vendor's JDK")
+	assert.Empty(t, packagesOfType(s, jdkType), "a Zulu runtime must never be reported as the vendor's JDK")
 
 	binaries := packagesOfType(s, pkg.BinaryPkg)
 	require.NotEmpty(t, binaries, "the generic java catalogers must still report the Zulu runtime")
@@ -261,15 +275,15 @@ func TestVendorJDKCataloger_NIK(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := catalog(t, nil, tt.runtime)
-			assert.Empty(t, describe(packagesOfType(s, pkg.VendorJdkPkg)), "a NIK must never be reported as a JDK")
+			assert.Empty(t, describe(packagesOfType(s, jdkType)), "a NIK must never be reported as a JDK")
 			all := runtimePackages(s)
 			require.Len(t, all, 1, "exactly one package for one runtime: %v", describe(all))
 
 			p := all[0]
-			assert.Equal(t, pkg.VendorNikPkg, p.Type)
+			assert.Equal(t, nikType, p.Type)
 			assert.Equal(t, tt.wantBundle, p.Name)
 			assert.Equal(t, tt.wantVersion, p.Version)
-			assert.Equal(t, osvjdk.PURLNIK(tt.wantBundle, tt.wantVersion), p.PURL)
+			assert.Equal(t, osvjdk.PURL(nikProduct.Family, tt.wantBundle, tt.wantVersion), p.PURL)
 			assert.True(t, strings.HasPrefix(p.PURL, nikPURLPrefix), p.PURL)
 			assert.Empty(t, p.CPEs)
 			assert.Equal(t, "java-vendor-jdk-cataloger", p.FoundBy)
@@ -281,6 +295,25 @@ func TestVendorJDKCataloger_NIK(t *testing.T) {
 			for _, loc := range p.Locations.ToSlice() {
 				assert.True(t, underHome(loc.RealPath, tt.wantHome), loc.RealPath)
 			}
+		})
+	}
+}
+
+// A runtime of any product family of the module is reported with the family's own package type and purl.
+func TestVendorJDKCataloger_EveryFamily(t *testing.T) {
+	for _, product := range osvinternal.Products {
+		t.Run(product.Family, func(t *testing.T) {
+			rt := testfix.Runtime{Product: product.Family, Home: "opt/runtime", Version: "21.0.2+14-LTS", JDK: true}
+			if product.Kind == osvinternal.KindNIK {
+				rt.NIK = "23.1.0+1"
+			}
+			s := catalog(t, nil, rt)
+			all := runtimePackages(s)
+			require.Len(t, all, 1, "exactly one package for one runtime: %v", describe(all))
+			p := all[0]
+			assert.Equal(t, pkg.VendorRuntimeType(product.Family), p.Type)
+			assert.Equal(t, osvjdk.PURL(product.Family, p.Name, p.Version), p.PURL)
+			assert.Empty(t, p.CPEs)
 		})
 	}
 }
@@ -298,8 +331,7 @@ func TestVendorJDKCataloger_NegativeCases(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := catalog(t, nil, tc.runtime)
-			assert.Empty(t, describe(packagesOfType(s, pkg.VendorJdkPkg)))
-			assert.Empty(t, describe(packagesOfType(s, pkg.VendorNikPkg)))
+			assert.Empty(t, describe(vendorRuntimePackages(s)))
 		})
 	}
 }
@@ -313,14 +345,14 @@ func TestVendorJDKCataloger_ApkManagedRuntimeSkipped(t *testing.T) {
 	)
 	require.NotNil(t, s.Artifacts.LinuxDistribution)
 	assert.Equal(t, osvinternal.OSReleaseIDLinux, s.Artifacts.LinuxDistribution.ID)
-	assert.Empty(t, describe(packagesOfType(s, pkg.VendorJdkPkg)))
+	assert.Empty(t, describe(vendorRuntimePackages(s)))
 	assert.Empty(t, describe(packagesOfType(s, pkg.BinaryPkg)), "no generic java package for a vendor runtime")
 }
 
 // File names are matched case-insensitively: the JVM library of the upper-case Windows layout anchors the package.
 func TestVendorJDKCataloger_CaseInsensitiveNames(t *testing.T) {
 	s := catalog(t, upperCaseWindows(testfix.Runtime{Home: "Program Files/Java/JDK-21.0.2", Version: "21.0.2+14-LTS", JDK: true, OS: "windows"}))
-	libs := packagesOfType(s, pkg.VendorJdkPkg)
+	libs := packagesOfType(s, jdkType)
 	require.Len(t, libs, 1)
 	var paths []string
 	for _, loc := range libs[0].Locations.ToSlice() {
